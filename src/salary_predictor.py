@@ -67,9 +67,47 @@ class SalaryPredictor:
             np.ndarray:
                 Numpy Array composed of numerical features converted from the raw inputs.
         """
-        # [!] TODO: Implement preprocessing and replace the below with the converted ndarray
-        # of numerical features!
-        return np.ndarray([])
+        
+        # Make a copy of the data so we don't mess up the original
+        data = features.copy()
+
+        # Clean up the strings (lots of columns have spaces and '?' for missing)
+        data = data.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+        data.replace('?', np.nan, inplace=True)
+
+        # Split into numerical and categorical columns
+        cat_cols = data.select_dtypes(include='object').columns
+        num_cols = data.select_dtypes(include=['int64', 'float64']).columns
+
+        # Handle missing data (impute with mean for numbers, mode for categories)
+        if training:
+            self.num_imputer = SimpleImputer(strategy='mean')
+            self.cat_imputer = SimpleImputer(strategy='most_frequent')
+            data[num_cols] = self.num_imputer.fit_transform(data[num_cols])
+            data[cat_cols] = self.cat_imputer.fit_transform(data[cat_cols])
+        else:
+            data[num_cols] = self.num_imputer.transform(data[num_cols])
+            data[cat_cols] = self.cat_imputer.transform(data[cat_cols])
+
+        # One-hot encode the categorical features
+        if training:
+            self.encoder = OneHotEncoder(handle_unknown='ignore', sparse=False)
+            cat_encoded = self.encoder.fit_transform(data[cat_cols])
+        else:
+            cat_encoded = self.encoder.transform(data[cat_cols])
+
+        # Scale numerical features (mean=0, std=1)
+        if training:
+            self.scaler = StandardScaler()
+            num_scaled = self.scaler.fit_transform(data[num_cols])
+        else:
+            num_scaled = self.scaler.transform(data[num_cols])
+
+        # Combine everything into one big feature matrix
+        features_final = np.hstack((num_scaled, cat_encoded))
+
+        return features_final
+
 
     def classify (self, X_test: pd.DataFrame) -> list[int]:
         """
@@ -118,3 +156,4 @@ class SalaryPredictor:
         return (classification_report(y_test,prediction, output_dict = False),
                 classification_report(y_test,prediction, output_dict = True))
         
+
